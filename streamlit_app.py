@@ -93,13 +93,18 @@ class HRModule(nn.Module):
         for i, fuse in enumerate(self.fuse_layers):
             y = branches_out[i]
             for j, f in enumerate(fuse):
-                if f is None: continue
+                if j == i:
+                    continue  # same branch, skip
                 bj = branches_out[j]
                 if j > i:
-                    bj = F.interpolate(f(bj), size=y.shape[-2:], mode='nearest')
-                    y = y + bj
+                    # higher res → upsample to match branch i
+                    fused = F.interpolate(f(bj), size=y.shape[-2:], mode='nearest')
                 else:
-                    y = y + F.interpolate(f(bj), size=y.shape[-2:], mode='nearest') if bj.shape[-1] != y.shape[-1] else y + f(bj)
+                    # lower res → downsample (f already includes stride convs)
+                    fused = f(bj)
+                    if fused.shape[-2:] != y.shape[-2:]:
+                        fused = F.interpolate(fused, size=y.shape[-2:], mode='nearest')
+                y = y + fused
             out.append(F.relu(y))
         return out
 
