@@ -318,24 +318,20 @@ def load_model():
         new_sd = {}
         for k, v in sd.items():
             new_k = k
-            # fuse_layers: .j.k.N.M. → .j.k.N. (collapse extra ModuleList level)
-            # Pattern: fuse_layers.i.j.d.e.f → fuse_layers.i.j.concat(d*steps+e).f
-            # Simpler: just strip the extra nested index for downsampling paths
-            # e.g. stage2.0.fuse_layers.1.0.0.0.weight → stage2.0.fuse_layers.1.0.0.weight
-            #      stage2.0.fuse_layers.1.0.0.1.weight → stage2.0.fuse_layers.1.0.1.weight
-            m = re.match(r'(.*\.fuse_layers\.\d+\.\d+\.)(\d+)\.(\d+)(.*)', new_k)
-            if m:
-                prefix, outer, inner, suffix = m.groups()
-                # outer=0 means first conv3x3 block, inner is the layer within it
-                # flatten: new index = outer * 3 + inner  (each conv3x3s block has 3 layers: Conv, BN, ReLU)
+
+            # 1) Transitions first (before fuse so they don't get mangled)
+            #    transition1.1.0.0.weight → transition1.1.0.weight
+            m_trans = re.match(r'^(transition\d+\.\d+\.)(\d+)\.(\d+)(\..+)$', new_k)
+            if m_trans:
+                prefix, outer, inner, suffix = m_trans.groups()
                 flat_idx = int(outer) * 3 + int(inner)
                 new_k = f"{prefix}{flat_idx}{suffix}"
 
-            # transitions: transition1.1.0.0.weight → transition1.1.0.weight
-            #              transition2.2.0.0.weight → transition2.2.0.weight
-            m2 = re.match(r'(.*transition\d+\.\d+\.)(\d+)\.(\d+)(.*)', new_k)
-            if m2:
-                prefix, outer, inner, suffix = m2.groups()
+            # 2) Fuse layers: only match keys that contain 'fuse_layers'
+            #    stage2.0.fuse_layers.1.0.0.0.weight → stage2.0.fuse_layers.1.0.0.weight
+            m_fuse = re.match(r'^(.*fuse_layers\.\d+\.\d+\.)(\d+)\.(\d+)(\..+)$', new_k)
+            if m_fuse:
+                prefix, outer, inner, suffix = m_fuse.groups()
                 flat_idx = int(outer) * 3 + int(inner)
                 new_k = f"{prefix}{flat_idx}{suffix}"
 
