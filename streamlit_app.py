@@ -27,7 +27,7 @@ class DigitCNN(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-MODEL_PATH = "/tmp/digit_cnn_mnist.pth"
+MODEL_PATH = "/tmp/digit_cnn_mnist_v2.pth"
 
 @st.cache_resource(show_spinner=False)
 def load_model():
@@ -40,8 +40,9 @@ def load_model():
         from torchvision import datasets, transforms
         from torch.utils.data import DataLoader
         tf = transforms.Compose([
-            transforms.RandomRotation(10),
-            transforms.RandomAffine(0, translate=(0.1, 0.1)),
+            transforms.RandomRotation(15),
+            transforms.RandomAffine(0, translate=(0.15, 0.15), scale=(0.85, 1.15)),
+            transforms.RandomPerspective(distortion_scale=0.2, p=0.3),
             transforms.ToTensor(),
             transforms.Normalize((0.1307,), (0.3081,)),
         ])
@@ -68,12 +69,29 @@ def load_model():
 def preprocess_image(img_array):
     img = Image.fromarray(img_array.astype("uint8"), "RGBA").convert("L")
     img = ImageOps.invert(img)
+    # Threshold to remove noise — anything faint becomes black background
+    arr = np.array(img)
+    arr = (arr > 50).astype(np.uint8) * 255
+    img = Image.fromarray(arr)
     bbox = img.getbbox()
-    if bbox:
-        img = img.crop(bbox)
-    img = img.resize((20, 20), Image.LANCZOS)
+    if bbox is None:
+        # Empty canvas — return blank
+        arr = np.zeros((28, 28), dtype=np.float32)
+        arr = (arr - 0.1307) / 0.3081
+        return torch.tensor(arr).unsqueeze(0).unsqueeze(0)
+    # Add padding around the digit before resizing
+    pad = 20
+    x0, y0, x1, y1 = bbox
+    x0, y0 = max(0, x0 - pad), max(0, y0 - pad)
+    x1, y1 = min(arr.shape[1], x1 + pad), min(arr.shape[0], y1 + pad)
+    img = img.crop((x0, y0, x1, y1))
+    # Resize keeping aspect ratio, fit inside 20x20
+    img.thumbnail((20, 20), Image.LANCZOS)
+    # Centre on 28x28 black canvas
     canvas = Image.new("L", (28, 28), 0)
-    canvas.paste(img, (4, 4))
+    offset_x = (28 - img.width)  // 2
+    offset_y = (28 - img.height) // 2
+    canvas.paste(img, (offset_x, offset_y))
     arr = np.array(canvas, dtype=np.float32) / 255.0
     arr = (arr - 0.1307) / 0.3081
     return torch.tensor(arr).unsqueeze(0).unsqueeze(0)
