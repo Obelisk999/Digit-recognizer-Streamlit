@@ -49,17 +49,14 @@ class DigitCNN(nn.Module):
 MODEL_PATH = "/tmp/best_model.pth"
 
 def download_model_from_kaggle():
-    """
-    Download best_model.pth from a Kaggle Model instance.
-    Source: taitruong256/hrnet-model/pytorch/default/1/best_model.pth
-    """
+    """Download best_model.pth using the Kaggle CLI (stable across API versions)."""
     if os.path.exists(MODEL_PATH):
-        return None  # already cached in /tmp for this session
+        return None
 
+    import json, subprocess
+
+    # ── Write credentials from Streamlit secrets ──
     try:
-        import json
-
-        # ── Write Kaggle credentials from Streamlit secrets ──
         kaggle_dir = os.path.expanduser("~/.kaggle")
         os.makedirs(kaggle_dir, exist_ok=True)
         creds_path = os.path.join(kaggle_dir, "kaggle.json")
@@ -71,39 +68,31 @@ def download_model_from_kaggle():
             with open(creds_path, "w") as f:
                 json.dump(creds, f)
             os.chmod(creds_path, 0o600)
-
-        from kaggle import KaggleApi
-        api = KaggleApi()
-        api.authenticate()
-
-        # ── Download the specific model instance ──
-        # Path: taitruong256/hrnet-model/pytorch/default/1
-        api.model_instance_version_download(
-            owner_slug    = "taitruong256",
-            model_slug    = "hrnet-model",
-            framework     = "pytorch",
-            instance_slug = "default",
-            version_number= 1,
-            path          = "/tmp",
-            quiet         = False,
-            untar         = True,
-        )
-
-        # The download extracts into /tmp — find best_model.pth
-        for root, _, files in os.walk("/tmp"):
-            for fname in files:
-                if fname == "best_model.pth":
-                    src = os.path.join(root, fname)
-                    if src != MODEL_PATH:
-                        os.rename(src, MODEL_PATH)
-                    return None
-
-        return "⚠️ `best_model.pth` not found after extracting the Kaggle model archive."
-
     except KeyError as e:
         return f"⚠️ Missing Streamlit secret: {e}. Add KAGGLE_USERNAME and KAGGLE_KEY in app Secrets."
-    except Exception as e:
-        return f"⚠️ Failed to download model from Kaggle: {e}"
+
+    # ── Download via CLI ──
+    # kaggle models instances versions download <owner>/<model>/<framework>/<instance>/<version>
+    cmd = [
+        "kaggle", "models", "instances", "versions", "download",
+        "taitruong256/hrnet-model/pytorch/default/1",
+        "--path", "/tmp",
+        "--untar",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        return f"⚠️ Kaggle CLI error: {result.stderr.strip()}"
+
+    # ── Find the file ──
+    for root, _, files in os.walk("/tmp"):
+        for fname in files:
+            if fname == "best_model.pth":
+                src = os.path.join(root, fname)
+                if src != MODEL_PATH:
+                    os.rename(src, MODEL_PATH)
+                return None
+
+    return "⚠️ `best_model.pth` not found after extracting. Check the model path on Kaggle."
 
 
 # ─── LOAD MODEL ─────────────────────────────────────────────────────────────────
