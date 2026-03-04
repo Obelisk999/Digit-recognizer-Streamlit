@@ -1,1 +1,1 @@
-print('Hey,second streamlit app ;)')
+print("Hey,second streamlit app")
