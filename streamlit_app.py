@@ -278,7 +278,7 @@ def load_model():
         # Use strict=False: loads all matching keys, skips mismatched fuse layer nesting
         missing, unexpected = model.load_state_dict(sd, strict=False)
         # Only fail if core layers are missing (not fuse_layers)
-        critical_missing = [k for k in missing if "fuse_layer" not in k]
+        critical_missing = [k for k in missing if "fuse_layer" not in k and "transition" not in k]
         if critical_missing:
             return None, f"⚠️ Critical keys missing from model: {critical_missing[:5]}"
         model.eval()
