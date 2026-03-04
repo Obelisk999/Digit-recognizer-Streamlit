@@ -72,8 +72,8 @@ def download_model_from_kaggle():
                 json.dump(creds, f)
             os.chmod(creds_path, 0o600)
 
-        from kaggle.api.kaggle_api_extended import KaggleApiExtended
-        api = KaggleApiExtended()
+        from kaggle import KaggleApi
+        api = KaggleApi()
         api.authenticate()
 
         # ── Download the specific model instance ──
