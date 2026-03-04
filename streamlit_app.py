@@ -315,20 +315,21 @@ def load_model():
         # Similarly for transitions:
         #   transition2.2.0.0.weight → transition2.2.0.weight
         import re
+        # Debug: show transition keys from checkpoint
+        trans_keys = [k for k in sd.keys() if 'transition1' in k]
+
         new_sd = {}
         for k, v in sd.items():
             new_k = k
 
-            # 1) Transitions first (before fuse so they don't get mangled)
-            #    transition1.1.0.0.weight → transition1.1.0.weight
+            # 1) Transitions first
             m_trans = re.match(r'^(transition\d+\.\d+\.)(\d+)\.(\d+)(\..+)$', new_k)
             if m_trans:
                 prefix, outer, inner, suffix = m_trans.groups()
                 flat_idx = int(outer) * 3 + int(inner)
                 new_k = f"{prefix}{flat_idx}{suffix}"
 
-            # 2) Fuse layers: only match keys that contain 'fuse_layers'
-            #    stage2.0.fuse_layers.1.0.0.0.weight → stage2.0.fuse_layers.1.0.0.weight
+            # 2) Fuse layers
             m_fuse = re.match(r'^(.*fuse_layers\.\d+\.\d+\.)(\d+)\.(\d+)(\..+)$', new_k)
             if m_fuse:
                 prefix, outer, inner, suffix = m_fuse.groups()
@@ -336,6 +337,9 @@ def load_model():
                 new_k = f"{prefix}{flat_idx}{suffix}"
 
             new_sd[new_k] = v
+
+        if trans_keys:
+            return None, f"DEBUG checkpoint transition1 keys: {trans_keys[:8]}"
 
         model = DigitCNN()
         missing, unexpected = model.load_state_dict(new_sd, strict=False)
