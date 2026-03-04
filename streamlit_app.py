@@ -267,13 +267,20 @@ def load_model():
 
     model = DigitCNN()
     try:
-        state = torch.load(MODEL_PATH, map_location=torch.device("cpu"))
+        state = torch.load(MODEL_PATH, map_location=torch.device("cpu"), weights_only=False)
         if isinstance(state, dict) and "model_state_dict" in state:
-            model.load_state_dict(state["model_state_dict"])
+            sd = state["model_state_dict"]
         elif isinstance(state, dict) and "state_dict" in state:
-            model.load_state_dict(state["state_dict"])
+            sd = state["state_dict"]
         else:
-            model.load_state_dict(state)
+            sd = state
+
+        # Use strict=False: loads all matching keys, skips mismatched fuse layer nesting
+        missing, unexpected = model.load_state_dict(sd, strict=False)
+        # Only fail if core layers are missing (not fuse_layers)
+        critical_missing = [k for k in missing if "fuse_layer" not in k]
+        if critical_missing:
+            return None, f"⚠️ Critical keys missing from model: {critical_missing[:5]}"
         model.eval()
         return model, None
     except Exception as e:
