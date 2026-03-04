@@ -314,29 +314,11 @@ def load_model():
         #   fuse_layers.i.j.0.weight    (flat nn.Sequential)
         # Similarly for transitions:
         #   transition2.2.0.0.weight → transition2.2.0.weight
-        import re
-        new_sd = {}
-        for k, v in sd.items():
-            new_k = k
-
-            # Only fuse_layers need remapping
-            # Checkpoint: stage2.0.fuse_layers.1.0.0.0.weight (ModuleList of Sequentials)
-            # Our model:  stage2.0.fuse_layers.1.0.0.weight   (flat Sequential)
-            m_fuse = re.match(r'^(.*fuse_layers\.\d+\.\d+\.)(\d+)\.(\d+)(\..+)$', new_k)
-            if m_fuse:
-                prefix, outer, inner, suffix = m_fuse.groups()
-                flat_idx = int(outer) * 3 + int(inner)
-                new_k = f"{prefix}{flat_idx}{suffix}"
-
-            new_sd[new_k] = v
-
         model = DigitCNN()
-        missing, unexpected = model.load_state_dict(new_sd, strict=False)
-        if missing:
-            # Filter out truly harmless keys (num_batches_tracked)
-            real_missing = [k for k in missing if 'num_batches_tracked' not in k]
-            if real_missing:
-                return None, f"⚠️ Keys still missing after remapping: {real_missing[:5]}"
+        missing, unexpected = model.load_state_dict(sd, strict=False)
+        real_missing = [k for k in missing if 'num_batches_tracked' not in k]
+        if real_missing:
+            return None, f"⚠️ Keys still missing: {real_missing[:5]}"
         model.eval()
         return model, None
     except Exception as e:
