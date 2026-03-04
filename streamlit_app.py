@@ -295,17 +295,59 @@ def load_model():
         return None, err
     try:
         obj = torch.load(MODEL_PATH, map_location=torch.device("cpu"), weights_only=False)
+
         # Case 1: full model object saved directly
         if isinstance(obj, torch.nn.Module):
             obj.eval()
             return obj, None
-        # Case 2: checkpoint dict with state_dict + need architecture
-        model = DigitCNN()
+
+        # Extract state dict
         if isinstance(obj, dict):
             sd = obj.get("model_state_dict") or obj.get("state_dict") or obj
         else:
             sd = obj
-        model.load_state_dict(sd, strict=False)
+
+        # ── Remap checkpoint keys to match our architecture ──
+        # Checkpoint stores fuse_layers downsampling as:
+        #   fuse_layers.i.j.0.0.weight  (extra nn.ModuleList wrapper)
+        # Our architecture stores them as:
+        #   fuse_layers.i.j.0.weight    (flat nn.Sequential)
+        # Similarly for transitions:
+        #   transition2.2.0.0.weight → transition2.2.0.weight
+        import re
+        new_sd = {}
+        for k, v in sd.items():
+            new_k = k
+            # fuse_layers: .j.k.N.M. → .j.k.N. (collapse extra ModuleList level)
+            # Pattern: fuse_layers.i.j.d.e.f → fuse_layers.i.j.concat(d*steps+e).f
+            # Simpler: just strip the extra nested index for downsampling paths
+            # e.g. stage2.0.fuse_layers.1.0.0.0.weight → stage2.0.fuse_layers.1.0.0.weight
+            #      stage2.0.fuse_layers.1.0.0.1.weight → stage2.0.fuse_layers.1.0.1.weight
+            m = re.match(r'(.*\.fuse_layers\.\d+\.\d+\.)(\d+)\.(\d+)(.*)', new_k)
+            if m:
+                prefix, outer, inner, suffix = m.groups()
+                # outer=0 means first conv3x3 block, inner is the layer within it
+                # flatten: new index = outer * 3 + inner  (each conv3x3s block has 3 layers: Conv, BN, ReLU)
+                flat_idx = int(outer) * 3 + int(inner)
+                new_k = f"{prefix}{flat_idx}{suffix}"
+
+            # transitions: transition2.2.0.0.weight → transition2.2.0.weight
+            #              transition3.3.0.0.weight → transition3.3.0.weight
+            m2 = re.match(r'(transition\d+\.\d+\.)(\d+)\.(\d+)(.*)', new_k)
+            if m2:
+                prefix, outer, inner, suffix = m2.groups()
+                flat_idx = int(outer) * 3 + int(inner)
+                new_k = f"{prefix}{flat_idx}{suffix}"
+
+            new_sd[new_k] = v
+
+        model = DigitCNN()
+        missing, unexpected = model.load_state_dict(new_sd, strict=False)
+        if missing:
+            # Filter out truly harmless keys (num_batches_tracked)
+            real_missing = [k for k in missing if 'num_batches_tracked' not in k]
+            if real_missing:
+                return None, f"⚠️ Keys still missing after remapping: {real_missing[:5]}"
         model.eval()
         return model, None
     except Exception as e:
