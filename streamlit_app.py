@@ -16,33 +16,196 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ─── MODEL DEFINITION ───────────────────────────────────────────────────────────
-# Define the same CNN architecture used during training on Kaggle
-class DigitCNN(nn.Module):
-    def __init__(self):
-        super(DigitCNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.dropout1 = nn.Dropout(0.25)
-        self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(128 * 3 * 3, 256)
-        self.fc2 = nn.Linear(256, 10)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.bn2 = nn.BatchNorm2d(64)
-        self.bn3 = nn.BatchNorm2d(128)
+# ─── MODEL DEFINITION — HRNet for digit classification ──────────────────────────
+# Reconstructed from the checkpoint keys in best_model.pth
+
+class BasicBlock(nn.Module):
+    def __init__(self, in_ch, out_ch, stride=1):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_ch, out_ch, 3, stride=stride, padding=1, bias=False)
+        self.bn1   = nn.BatchNorm2d(out_ch)
+        self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1, bias=False)
+        self.bn2   = nn.BatchNorm2d(out_ch)
+        self.downsample = None
+        if stride != 1 or in_ch != out_ch:
+            self.downsample = nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, 1, stride=stride, bias=False),
+                nn.BatchNorm2d(out_ch)
+            )
 
     def forward(self, x):
-        x = self.pool(F.relu(self.bn1(self.conv1(x))))
-        x = self.pool(F.relu(self.bn2(self.conv2(x))))
-        x = self.pool(F.relu(self.bn3(self.conv3(x))))
-        x = self.dropout1(x)
-        x = x.view(-1, 128 * 3 * 3)
-        x = F.relu(self.fc1(x))
-        x = self.dropout2(x)
-        x = self.fc2(x)
-        return x
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += self.downsample(x) if self.downsample else x
+        return F.relu(out)
+
+
+class Bottleneck(nn.Module):
+    expansion = 4
+    def __init__(self, in_ch, planes, stride=1, downsample=None):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_ch, planes, 1, bias=False)
+        self.bn1   = nn.BatchNorm2d(planes)
+        self.conv2 = nn.Conv2d(planes, planes, 3, stride=stride, padding=1, bias=False)
+        self.bn2   = nn.BatchNorm2d(planes)
+        self.conv3 = nn.Conv2d(planes, planes * 4, 1, bias=False)
+        self.bn3   = nn.BatchNorm2d(planes * 4)
+        self.downsample = downsample
+
+    def forward(self, x):
+        residual = x
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = F.relu(self.bn2(self.conv2(out)))
+        out = self.bn3(self.conv3(out))
+        if self.downsample: residual = self.downsample(x)
+        return F.relu(out + residual)
+
+
+class HRModule(nn.Module):
+    def __init__(self, branches, channels):
+        super().__init__()
+        self.branches = nn.ModuleList([
+            nn.Sequential(*[BasicBlock(channels[i], channels[i]) for _ in range(4)])
+            for i in range(branches)
+        ])
+        self.fuse_layers = nn.ModuleList()
+        for i in range(branches):
+            fuse = nn.ModuleList()
+            for j in range(branches):
+                if j > i:
+                    fuse.append(nn.Sequential(
+                        nn.Conv2d(channels[j], channels[i], 1, bias=False),
+                        nn.BatchNorm2d(channels[i])
+                    ))
+                elif j < i:
+                    ops = []
+                    for k in range(i - j):
+                        ops += [nn.Conv2d(channels[j], channels[j], 3, stride=2, padding=1, bias=False),
+                                nn.BatchNorm2d(channels[j])]
+                    fuse.append(nn.Sequential(*ops))
+                else:
+                    fuse.append(None)
+            self.fuse_layers.append(fuse)
+
+    def forward(self, x):
+        branches_out = [b(x[i]) for i, b in enumerate(self.branches)]
+        out = []
+        for i, fuse in enumerate(self.fuse_layers):
+            y = branches_out[i]
+            for j, f in enumerate(fuse):
+                if f is None: continue
+                bj = branches_out[j]
+                if j > i:
+                    bj = F.interpolate(f(bj), size=y.shape[-2:], mode='nearest')
+                    y = y + bj
+                else:
+                    y = y + F.interpolate(f(bj), size=y.shape[-2:], mode='nearest') if bj.shape[-1] != y.shape[-1] else y + f(bj)
+            out.append(F.relu(y))
+        return out
+
+
+class DigitCNN(nn.Module):
+    """HRNet-W18-Small adapted for 28x28 grayscale digit classification."""
+    def __init__(self, num_classes=10):
+        super().__init__()
+        # Stem
+        self.conv1 = nn.Conv2d(1, 64, 3, stride=1, padding=1, bias=False)
+        self.bn1   = nn.BatchNorm2d(64)
+        self.conv2 = nn.Conv2d(64, 64, 3, stride=1, padding=1, bias=False)
+        self.bn2   = nn.BatchNorm2d(64)
+
+        # Layer1 — 4 Bottleneck blocks, in=64 → out=256
+        def make_layer1():
+            layers = []
+            ds = nn.Sequential(nn.Conv2d(64, 256, 1, bias=False), nn.BatchNorm2d(256))
+            layers.append(Bottleneck(64, 64, downsample=ds))
+            for _ in range(3):
+                layers.append(Bottleneck(256, 64))
+            return nn.Sequential(*layers)
+        self.layer1 = make_layer1()
+
+        # Transition 1: 256 → [18, 36]
+        self.transition1 = nn.ModuleList([
+            nn.Sequential(nn.Conv2d(256, 18, 3, padding=1, bias=False), nn.BatchNorm2d(18)),
+            nn.Sequential(nn.Sequential(nn.Conv2d(256, 36, 3, stride=2, padding=1, bias=False), nn.BatchNorm2d(36)))
+        ])
+
+        # Stage 2: 2 branches [18, 36], 2 modules
+        self.stage2 = nn.Sequential(
+            HRModule(2, [18, 36]),
+            HRModule(2, [18, 36]),
+        )
+
+        # Transition 2: add branch [72]
+        self.transition2 = nn.ModuleList([
+            None, None,
+            nn.Sequential(nn.Conv2d(36, 72, 3, stride=2, padding=1, bias=False), nn.BatchNorm2d(72))
+        ])
+
+        # Stage 3: 3 branches [18, 36, 72], 3 modules
+        self.stage3 = nn.Sequential(
+            HRModule(3, [18, 36, 72]),
+            HRModule(3, [18, 36, 72]),
+            HRModule(3, [18, 36, 72]),
+        )
+
+        # Transition 3: add branch [144]
+        self.transition3 = nn.ModuleList([
+            None, None, None,
+            nn.Sequential(nn.Conv2d(72, 144, 3, stride=2, padding=1, bias=False), nn.BatchNorm2d(144))
+        ])
+
+        # Stage 4: 4 branches [18, 36, 72, 144], 4 modules
+        self.stage4 = nn.Sequential(
+            HRModule(4, [18, 36, 72, 144]),
+            HRModule(4, [18, 36, 72, 144]),
+            HRModule(4, [18, 36, 72, 144]),
+            HRModule(4, [18, 36, 72, 144]),
+        )
+
+        # Classification head
+        pre_stage_channels = [18, 36, 72, 144]
+        head_channels = [32, 64, 128, 256]
+
+        self.incre_modules = nn.ModuleList()
+        for i, (inc, hc) in enumerate(zip(pre_stage_channels, head_channels)):
+            ds = nn.Sequential(nn.Conv2d(inc, hc * 4, 1, bias=False), nn.BatchNorm2d(hc * 4))
+            self.incre_modules.append(nn.Sequential(Bottleneck(inc, hc, downsample=ds)))
+
+        self.downsamp_modules = nn.ModuleList([
+            nn.Sequential(nn.Conv2d(128, 256, 3, stride=2, padding=1, bias=False), nn.BatchNorm2d(256)),
+            nn.Sequential(nn.Conv2d(256, 512, 3, stride=2, padding=1, bias=False), nn.BatchNorm2d(512)),
+            nn.Sequential(nn.Conv2d(512, 1024, 3, stride=2, padding=1, bias=False), nn.BatchNorm2d(1024)),
+        ])
+
+        self.final_layer = nn.Sequential(
+            nn.Conv2d(1024, 2048, 1, bias=True),
+            nn.BatchNorm2d(2048),
+        )
+        self.classifier = nn.Linear(2048, num_classes)
+
+    def forward(self, x):
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.layer1(x)
+
+        y = [t(x) if t else x for t in self.transition1]
+        for m in self.stage2: y = m(y)
+
+        y2 = [y[0], y[1], self.transition2[2](y[1])]
+        for m in self.stage3: y2 = m(y2)
+
+        y3 = [y2[0], y2[1], y2[2], self.transition3[3](y2[2])]
+        for m in self.stage4: y3 = m(y3)
+
+        # Head
+        y = self.incre_modules[0](y3[0])
+        for i in range(3):
+            y = self.downsamp_modules[i](y) + self.incre_modules[i+1](y3[i+1])
+
+        y = F.relu(self.final_layer(y))
+        y = F.adaptive_avg_pool2d(y, 1).view(y.size(0), -1)
+        return self.classifier(y)
 
 
 # ─── DOWNLOAD MODEL FROM KAGGLE ─────────────────────────────────────────────────
