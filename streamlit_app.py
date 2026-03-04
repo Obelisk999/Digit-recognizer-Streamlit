@@ -316,31 +316,19 @@ def load_model():
         #   transition2.2.0.0.weight → transition2.2.0.weight
         import re
         new_sd = {}
-        debug_info = []
         for k, v in sd.items():
             new_k = k
 
-            # 1) Transitions first
-            m_trans = re.match(r'^(transition\d+\.\d+\.)(\d+)\.(\d+)(\..+)$', new_k)
-            if m_trans:
-                prefix, outer, inner, suffix = m_trans.groups()
-                flat_idx = int(outer) * 3 + int(inner)
-                new_k = f"{prefix}{flat_idx}{suffix}"
-
-            # 2) Fuse layers
+            # Only fuse_layers need remapping
+            # Checkpoint: stage2.0.fuse_layers.1.0.0.0.weight (ModuleList of Sequentials)
+            # Our model:  stage2.0.fuse_layers.1.0.0.weight   (flat Sequential)
             m_fuse = re.match(r'^(.*fuse_layers\.\d+\.\d+\.)(\d+)\.(\d+)(\..+)$', new_k)
             if m_fuse:
                 prefix, outer, inner, suffix = m_fuse.groups()
                 flat_idx = int(outer) * 3 + int(inner)
                 new_k = f"{prefix}{flat_idx}{suffix}"
 
-            if 'transition1.1' in k:
-                debug_info.append(f"{k} → {new_k}")
-
             new_sd[new_k] = v
-
-        if debug_info:
-            return None, f"DEBUG transition1.1 mapping: {debug_info[:5]}"
 
         model = DigitCNN()
         missing, unexpected = model.load_state_dict(new_sd, strict=False)
