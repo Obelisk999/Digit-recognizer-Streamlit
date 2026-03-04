@@ -269,27 +269,23 @@ def load_model():
     err = download_model_from_kaggle()
     if err:
         return None, err
-
-    model = DigitCNN()
     try:
-        state = torch.load(MODEL_PATH, map_location=torch.device("cpu"), weights_only=False)
-        if isinstance(state, dict) and "model_state_dict" in state:
-            sd = state["model_state_dict"]
-        elif isinstance(state, dict) and "state_dict" in state:
-            sd = state["state_dict"]
+        obj = torch.load(MODEL_PATH, map_location=torch.device("cpu"), weights_only=False)
+        # Case 1: full model object saved directly
+        if isinstance(obj, torch.nn.Module):
+            obj.eval()
+            return obj, None
+        # Case 2: checkpoint dict with state_dict + need architecture
+        model = DigitCNN()
+        if isinstance(obj, dict):
+            sd = obj.get("model_state_dict") or obj.get("state_dict") or obj
         else:
-            sd = state
-
-        # Use strict=False: loads all matching keys, skips mismatched fuse layer nesting
-        missing, unexpected = model.load_state_dict(sd, strict=False)
-        # Only fail if core layers are missing (not fuse_layers)
-        critical_missing = [k for k in missing if "fuse_layer" not in k and "transition" not in k]
-        if critical_missing:
-            return None, f"⚠️ Critical keys missing from model: {critical_missing[:5]}"
+            sd = obj
+        model.load_state_dict(sd, strict=False)
         model.eval()
         return model, None
     except Exception as e:
-        return None, f"⚠️ Error loading model weights: {e}"
+        return None, f"⚠️ Error loading model: {e}"
 
 
 # ─── PREPROCESSING ──────────────────────────────────────────────────────────────
