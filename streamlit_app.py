@@ -331,9 +331,9 @@ def load_model():
                 flat_idx = int(outer) * 3 + int(inner)
                 new_k = f"{prefix}{flat_idx}{suffix}"
 
-            # transitions: transition2.2.0.0.weight → transition2.2.0.weight
-            #              transition3.3.0.0.weight → transition3.3.0.weight
-            m2 = re.match(r'(transition\d+\.\d+\.)(\d+)\.(\d+)(.*)', new_k)
+            # transitions: transition1.1.0.0.weight → transition1.1.0.weight
+            #              transition2.2.0.0.weight → transition2.2.0.weight
+            m2 = re.match(r'(.*transition\d+\.\d+\.)(\d+)\.(\d+)(.*)', new_k)
             if m2:
                 prefix, outer, inner, suffix = m2.groups()
                 flat_idx = int(outer) * 3 + int(inner)
