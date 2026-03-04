@@ -315,10 +315,8 @@ def load_model():
         # Similarly for transitions:
         #   transition2.2.0.0.weight → transition2.2.0.weight
         import re
-        # Debug: show transition keys from checkpoint
-        trans_keys = [k for k in sd.keys() if 'transition1' in k]
-
         new_sd = {}
+        debug_info = []
         for k, v in sd.items():
             new_k = k
 
@@ -336,10 +334,13 @@ def load_model():
                 flat_idx = int(outer) * 3 + int(inner)
                 new_k = f"{prefix}{flat_idx}{suffix}"
 
+            if 'transition1.1' in k:
+                debug_info.append(f"{k} → {new_k}")
+
             new_sd[new_k] = v
 
-        if trans_keys:
-            return None, f"DEBUG checkpoint transition1 keys: {trans_keys[:8]}"
+        if debug_info:
+            return None, f"DEBUG transition1.1 mapping: {debug_info[:5]}"
 
         model = DigitCNN()
         missing, unexpected = model.load_state_dict(new_sd, strict=False)
