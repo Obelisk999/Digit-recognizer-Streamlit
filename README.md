@@ -1,104 +1,166 @@
-# 🔢 Reconnaissance de Chiffres — Streamlit
+<div align="center">
 
-Une application web interactive qui vous permet de **dessiner un chiffre à la main** sur un canvas et de le classifier instantanément (0–9) grâce à un **Réseau de Neurones Convolutif (CNN)** personnalisé entraîné sur le jeu de données [MNIST](http://yann.lecun.com/exdb/mnist/).
+# 🔢 Digit.AI — Real-Time Handwritten Digit Recognizer
 
-Développée avec **PyTorch** et déployée avec **Streamlit**.
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11"/>
+  <img src="https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white" alt="Streamlit"/>
+  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch"/>
+  <img src="https://img.shields.io/badge/MNIST-Dataset-00B4D8?style=for-the-badge&logo=databricks&logoColor=white" alt="MNIST"/>
+  <img src="https://img.shields.io/badge/License-Open%20Source-brightgreen?style=for-the-badge" alt="License"/>
+</p>
 
----
+<p align="center">
+  <b>Draw any digit (0–9) on a canvas and watch a CNN classify it in real time ⚡</b><br/>
+  <i>Powered by a custom PyTorch CNN · Trained on MNIST · Deployed with Streamlit</i>
+</p>
 
-## ✨ Fonctionnalités
-
-- 🖊️ **Canvas de dessin libre** — dessinez n'importe quel chiffre avec la souris ou un écran tactile
-- ⚡ **Inférence en temps réel** — prédiction du CNN avec score de confiance affiché immédiatement
-- 📊 **Distribution complète des probabilités** — graphique en barres montrant les probabilités softmax pour les 10 chiffres (0–9)
-- 🤖 **Entraînement autonome du modèle** — si aucun poids pré-entraîné n'est trouvé, l'application télécharge MNIST et entraîne un modèle automatiquement au premier lancement (~2 minutes)
-- 🎨 **Interface sombre élégante** — CSS personnalisé avec un thème sombre minimaliste
-
----
-
-## 🧠 Architecture du Modèle
-
-Le modèle `DigitCNN` est un CNN à cinq couches avec la structure suivante :
-
-| Couche | Détails |
-|---|---|
-| Bloc Conv 1 | Conv2d(1→32, 3×3) → ReLU → BatchNorm → Conv2d(32→32) → ReLU → MaxPool(2×2) → Dropout2d(0.25) |
-| Bloc Conv 2 | Conv2d(32→64, 3×3) → ReLU → BatchNorm → Conv2d(64→64) → ReLU → MaxPool(2×2) → Dropout2d(0.25) |
-| Bloc Conv 3 | Conv2d(64→128, 3×3) → ReLU → BatchNorm |
-| Couche FC 1 | Linear(128×7×7 → 256) → ReLU → Dropout(0.5) |
-| Couche de Sortie | Linear(256 → 10) |
-
-L'entraînement utilise l'optimiseur **Adam** avec un planificateur de taux d'apprentissage par paliers (×0,5 toutes les 3 époques) sur **8 époques** avec augmentation de données (rotation aléatoire, transformations affines, distorsion de perspective).
+</div>
 
 ---
 
-## 🗂️ Structure du Projet
+## ✨ Features
+
+| Feature | Description |
+|:-------:|-------------|
+| 🖊️ **Free-Draw Canvas** | Draw any digit with your mouse or touchscreen on a 280×280 canvas |
+| ⚡ **Real-Time Inference** | Instant CNN prediction with confidence score |
+| 📊 **Probability Distribution** | Softmax bar chart for all 10 digit classes (0–9) |
+| 🤖 **Self-Training Model** | Auto-downloads MNIST and trains from scratch on first launch (~2 min) |
+| 🎨 **Sleek Dark UI** | Custom CSS with a minimalist dark theme using Space Mono & DM Sans |
+
+---
+
+## 🧠 Model Architecture
+
+> **DigitCNN** — a 5-block Convolutional Neural Network trained end-to-end on MNIST
+
+```
+Input (1×28×28)
+     │
+     ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Conv Block 1 │ Conv2d(1→32, 3×3) → ReLU → BN              │
+│               │ Conv2d(32→32, 3×3) → ReLU → MaxPool → Drop  │
+├─────────────────────────────────────────────────────────────┤
+│  Conv Block 2 │ Conv2d(32→64, 3×3) → ReLU → BN              │
+│               │ Conv2d(64→64, 3×3) → ReLU → MaxPool → Drop  │
+├─────────────────────────────────────────────────────────────┤
+│  Conv Block 3 │ Conv2d(64→128, 3×3) → ReLU → BatchNorm      │
+├─────────────────────────────────────────────────────────────┤
+│  FC Layer     │ Linear(128×7×7 → 256) → ReLU → Dropout(0.5) │
+├─────────────────────────────────────────────────────────────┤
+│  Output       │ Linear(256 → 10)                             │
+└─────────────────────────────────────────────────────────────┘
+     │
+     ▼
+Softmax → Predicted Digit + Confidence Score
+```
+
+**Training details:**
+- 🔧 Optimizer: **Adam** (lr = 1e-3)
+- 📉 Scheduler: **StepLR** (×0.5 every 3 epochs)
+- 🔁 Epochs: **8**
+- 🎲 Augmentation: random rotation, affine transforms, perspective distortion
+
+---
+
+## 🗂️ Project Structure
 
 ```
 Digit-recognizer-Streamlit/
-├── streamlit_app.py   # Application principale (modèle, prétraitement, interface)
-├── requirements.txt   # Dépendances Python
-├── runtime.txt        # Version Python fixée (3.11)
-└── README.md
+├── 📄 streamlit_app.py   ← Main app (model, preprocessing, UI)
+├── 📦 requirements.txt   ← Python dependencies
+├── 🐍 runtime.txt        ← Python version pinned to 3.11
+└── 📖 README.md
 ```
 
 ---
 
-## 🚀 Démarrage Rapide
+## 🚀 Quick Start
 
-### Prérequis
+### Prerequisites
 
-- Python **3.11+** (3.11 est utilisé dans le déploiement de référence ; voir `runtime.txt`)
+- Python **3.11+** — see `runtime.txt`
 - [pip](https://pip.pypa.io/)
 
-### Installation
+### Install & Run
 
 ```bash
-# 1. Cloner le dépôt
+# 1. Clone the repo
 git clone https://github.com/Obelisk999/Digit-recognizer-Streamlit.git
 cd Digit-recognizer-Streamlit
 
-# 2. (Optionnel) Créer et activer un environnement virtuel
+# 2. (Optional) Create a virtual environment
 python -m venv .venv
-source .venv/bin/activate   # Windows : .venv\Scripts\activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-# 3. Installer les dépendances
+# 3. Install dependencies
 pip install -r requirements.txt
-```
 
-### Lancer l'Application
-
-```bash
+# 4. Launch the app 🚀
 streamlit run streamlit_app.py
 ```
 
-Ouvrez votre navigateur à l'adresse [http://localhost:8501](http://localhost:8501).
+Open your browser at [http://localhost:8501](http://localhost:8501) and start drawing!
 
-> **Premier lancement :** Si aucun poids pré-entraîné n'existe, l'application téléchargera automatiquement le jeu de données MNIST et entraînera le modèle (~2 minutes). Les lancements suivants chargent les poids sauvegardés instantanément.  
-> **Remarque (Windows) :** Le chemin de cache du modèle par défaut est `/tmp/digit_cnn_mnist_v2.pth` (Unix/macOS). Les utilisateurs Windows doivent modifier `MODEL_PATH` dans `streamlit_app.py` pour pointer vers un répertoire accessible en écriture, par exemple `C:/Users/<vous>/AppData/Local/Temp/digit_cnn_mnist_v2.pth`.
-
----
-
-## 🖥️ Utilisation
-
-1. **Dessinez** n'importe quel chiffre (0–9) dans le canvas noir avec la souris ou un stylet.
-2. Cliquez sur **⚡ Predict Digit** pour lancer l'inférence.
-3. Consultez le **chiffre prédit**, le **score de confiance** et le **graphique complet des probabilités softmax**.
-4. Cliquez sur **✕ Clear** pour réinitialiser le canvas et dessiner à nouveau.
+> **💡 First launch:** The app will automatically download MNIST (~11 MB) and train the model (~2 min). Subsequent launches load the saved weights instantly.
+>
+> **🪟 Windows note:** The default model cache path is `/tmp/digit_cnn_mnist_v2.pth`. Windows users should update `MODEL_PATH` in `streamlit_app.py` to a writable path, e.g. `C:/Users/<you>/AppData/Local/Temp/digit_cnn_mnist_v2.pth`.
 
 ---
 
-## 📦 Dépendances
+## 🖥️ How to Use
 
-| Package | Rôle |
-|---|---|
-| `streamlit` | Framework d'application web |
-| `torch` / `torchvision` | Entraînement et inférence du CNN |
-| `streamlit-drawable-canvas` | Composant canvas de dessin interactif |
-| `Pillow` | Prétraitement des images |
-| `numpy` | Opérations numériques |
+```
+1. ✏️  Draw any digit (0–9) on the black canvas
+2. ⚡  Click "Predict Digit" to run the CNN
+3. 🎯  See the predicted digit + confidence score
+4. 📊  Explore the full probability distribution
+5. 🔄  Hit "Clear" to draw again
+```
 
-Installez toutes les dépendances avec :
+---
+
+## ⚙️ Under the Hood
+
+```
+User Drawing (280×280 RGBA canvas)
+         │
+         ▼
+  Convert to Grayscale & Invert
+  (MNIST format: white digit on black background)
+         │
+         ▼
+  Threshold (>50) → Remove noise
+         │
+         ▼
+  Crop bounding box + 20px padding
+         │
+         ▼
+  Resize to 20×20 (aspect-ratio preserved)
+         │
+         ▼
+  Center-paste onto 28×28 black canvas
+         │
+         ▼
+  Normalize (mean=0.1307, std=0.3081)
+         │
+         ▼
+  DigitCNN → Softmax → argmax = Predicted Digit 🎯
+```
+
+---
+
+## 📦 Dependencies
+
+| Package | Role |
+|---------|------|
+| `streamlit` | Web app framework |
+| `torch` / `torchvision` | CNN training & inference |
+| `streamlit-drawable-canvas` | Interactive drawing component |
+| `Pillow` | Image preprocessing |
+| `numpy` | Numerical operations |
 
 ```bash
 pip install -r requirements.txt
@@ -106,18 +168,28 @@ pip install -r requirements.txt
 
 ---
 
-## ⚙️ Fonctionnement
+## 🤝 Contributing
 
-1. L'utilisateur dessine un chiffre sur un canvas HTML 280×280 (trait blanc sur fond noir).
-2. L'image RGBA brute est convertie en niveaux de gris et **inversée** (MNIST utilise des chiffres blancs sur fond noir).
-3. Un seuillage supprime le bruit léger ; la boîte englobante du chiffre est recadrée avec un rembourrage.
-4. Le recadrage est **redimensionné à 20×20** (en conservant les proportions) et **centré sur un canvas 28×28** — correspondant exactement au format d'entrée MNIST.
-5. Les valeurs de pixels sont normalisées avec la moyenne MNIST (0,1307) et l'écart-type (0,3081).
-6. Le tenseur est passé dans `DigitCNN` et un **softmax** produit les probabilités par classe.
-7. L'argmax donne le chiffre prédit ; la probabilité correspondante est le score de confiance.
+Contributions, ideas, and bug reports are welcome! Feel free to:
+
+1. 🍴 Fork the project
+2. 🔧 Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. 💾 Commit your changes (`git commit -m 'Add amazing feature'`)
+4. 📤 Push to the branch (`git push origin feature/amazing-feature`)
+5. 🔃 Open a Pull Request
 
 ---
 
-## 📄 Licence
+## 📄 License
 
-Ce projet est open source. N'hésitez pas à l'utiliser, le modifier et le distribuer.
+This project is **open source** — feel free to use, modify, and distribute it.
+
+---
+
+<div align="center">
+
+Made with ❤️ and ☕ · Powered by <b>PyTorch</b> · Built with <b>Streamlit</b>
+
+⭐ If you find this project useful, give it a star!
+
+</div>
